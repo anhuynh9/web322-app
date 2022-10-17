@@ -15,19 +15,14 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2
 const fs = require('fs');
 const bodyParser = require('body-parser');
+const streamifier = require("streamifier");
+const { get } = require("http");
+const upload = multer();
 const productservice = require(__dirname + "/product-service.js");
 
 
 
-//addproduct storage
-const storage = multer.diskStorage({
-    destination: "./public/products/uploaded",
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + path.extname(file.originalname));
-      }
-});
 
-const upload = multer({storage: storage});
 
 onHttpStart = () => {
     console.log('Express http server listening on port ' + HTTP_PORT);
@@ -51,14 +46,47 @@ app.get('/addProduct', (req, res) => {
     res.sendFile(path.join(__dirname + "/views/addProduct.html"));
 });
 
+//add image cloudinary code
+app.post("/products/add", upload.single("featureImage"), function (req, res) {
+    let streamUpload = (req) => {
+      return new Promise((resolve, reject) => {
+        let stream = cloudinary.uploader.upload_stream((error, result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(error);
+          }
+        });
+  
+        streamifier.createReadStream(req.file.buffer).pipe(stream);
+      });
+    };
+  
+    async function upload(req) {
+      let result = await streamUpload(req);
+      console.log(result);
+      return result;
+    }
+  
+    upload(req).then((uploaded) => {
+      req.body.featureImage = uploaded.url;
+    });
+  
+    // TODO: Process the req.body and add it as a new Product Demo before redirecting to /demos
+    productSrv.addProduct(req.body).then(() => {
+      res.redirect("/demos"); //after done redirect to demos
+    });
+  });
+
+
 //products
 
 
 
 
-app.get("/products", (req, res) => {
-    if (req.query.postDate) {
-        productservice.getProductByMinDate(req.query.postDate).then((data) => {
+app.get("/demos", (req, res) => {
+    if (req.query.minDate) {
+        productservice.getProductByMinDate(req.query.minDate).then((data) => {
             res.json({data});
         }).catch((err) => {
             res.json({message: err});
@@ -66,13 +94,6 @@ app.get("/products", (req, res) => {
     }
     else if (req.query.category) {
         productservice.getProductByCategory(req.query.category).then((data) => {
-            res.json({data});
-        }).catch((err) => {
-            res.json({message: err});
-        })
-    }
-    else if (req.query.id) {
-        productservice.getProductById(req.query.id).then((data) => {
             res.json({data});
         }).catch((err) => {
             res.json({message: err});
@@ -96,41 +117,6 @@ app.get('/product/:value', (req,res) => {
     })
 });
    
-app.get('/products/add',(req,res) => {
-    res.sendFile(path.join(__dirname + "/views/addProduct.html"));
-});
-
-app.post('/products/add', (req,res) => {
-    productservice.addProduct(req.body).then(() => {
-        res.redirect("/products");
-    })
-});
-//images
-app.get('/products/add',(req,res) => {
-    res.sendFile(path.join(__dirname + "/views/addProduct.html"));
-});
-
-app.post("/products/add", upload.single("productFile"), (req,res) => {
-    res.redirect("/products");
-});
-
-app.get("/products", (req,res) => {
-    fs.readdir("./public/products/uploaded", function(err,items) {
-        res.json(items);
-    })
-});
-
-
-
-//demos
-app.get("/demos", (req, res) => {
-    productservice.getPublishedProducts().then((data) => {
-        res.json({data});
-    }).catch((err) => {
-        res.json({message: err});
-    })
-});
-
 
 
 app.get("/categories", (req, res) => {
@@ -138,16 +124,6 @@ app.get("/categories", (req, res) => {
         res.json({data});
     }).catch((err) => {
         res.json({message: err});
-    })
-});
-//update
-app.get('/products/add',(req,res) => {
-    res.sendFile(path.join(__dirname + "/views/addProduct.html"));
-});
-
-app.post('/products/add', (req,res) => {
-    productservice.addProduct(req.body).then(() => {
-        res.redirect("/products");
     })
 });
 

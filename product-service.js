@@ -36,27 +36,8 @@ exports.getAllProducts = () => {
     })
 };
 
-exports.getPublishedProducts = () => {
-    return new Promise ((resolve, reject) => {
-        var publishedProducts = products.filter(product => product.published == true);
-        if (publishedProducts.length == 0) {
-            reject('no results returned');
-        }
-        resolve(publishedProducts);
-    })
-};
 
-exports.getCategories = () => {
-    return new Promise((resolve,reject) => {
-        if (categories.length == 0) {
-            reject ('no results returned');
-        }
-        else {
-            resolve (categories);
-        }
-    })
-};
-
+//add product
 exports.addProduct = (productData) => {
     productData.published==undefined ? productData.ipublished = false : productData.published = true;
     productData.employeeNum = employees.length + 1;
@@ -71,6 +52,27 @@ exports.addProduct = (productData) => {
         }
     })
 };
+
+exports.getCategories = () => {
+    return new Promise((resolve,reject) => {
+        if (categories.length == 0) {
+            reject ('no results returned');
+        }
+        else {
+            resolve (categories);
+        }
+    })
+};
+exports.getPublishedProducts = () => {
+    return new Promise ((resolve, reject) => {
+        var publishedProducts = products.filter(product => product.published == true);
+        if (publishedProducts.length == 0) {
+            reject('no results returned');
+        }
+        resolve(publishedProducts);
+    })
+};
+
 exports.getProductByMinDate = (postDate) => {
     return new Promise((resolve,reject) => {
         var prod_postDate = products.filter(product => product.postDate == postDate);
