@@ -87,6 +87,14 @@ app.get("/products", (req, res) => {
     
     }
 });
+
+app.get('/product/:value', (req,res) => {
+    productservice.getProductById(req.params.value).then((data) => {
+        res.json({data});
+    }).catch((err) => {
+        res.json({message: err});
+    })
+});
    
 app.get('/products/add',(req,res) => {
     res.sendFile(path.join(__dirname + "/views/addProduct.html"));
@@ -97,16 +105,23 @@ app.post('/products/add', (req,res) => {
         res.redirect("/products");
     })
 });
+//images
+app.get('/products/add',(req,res) => {
+    res.sendFile(path.join(__dirname + "/views/addProduct.html"));
+});
 
+app.post("/products/add", upload.single("productFile"), (req,res) => {
+    res.redirect("/products");
+});
 
-
-app.get('/product/:value', (req,res) => {
-    productservice.getProductById(req.params.value).then((data) => {
-        res.json({data});
-    }).catch((err) => {
-        res.json({message: err});
+app.get("/products", (req,res) => {
+    fs.readdir("./public/products/uploaded", function(err,items) {
+        res.json(items);
     })
 });
+
+
+
 //demos
 app.get("/demos", (req, res) => {
     productservice.getPublishedProducts().then((data) => {
