@@ -1,142 +1,147 @@
-const express = require("express");
-const fs = require('fs');
-const multer = require("multer");
+/*********************************************************************************
+* WEB322 – Assignment 02
+* I declare that this assignment is my own work in accordance with Seneca Academic Policy. No part
+* of this assignment has been copied manually or electronically from any other source
+* (including 3rd party web sites) or distributed to other students. *
+* Name: An Truong Huynh Student ID: 123194219 Date: October 1 2022 *
+* Online (Cyclic) Link: https://spring-green-coral-ring.cyclic.app/ *
+* ********************************************************************************/
+
+var HTTP_PORT = process.env.PORT || 8080;
+var express = require("express");
+var app = express();
+var path = require('path');
+const multer = require('multer');
 const cloudinary = require('cloudinary').v2
-const streamifier = require('streamifier');
+const fs = require('fs');
 const bodyParser = require('body-parser');
-const productService = require('./product-service');
+var productservice = require(__dirname + "/product-service.js");
 
-productService.getAllProducts()
-    .then((data) => {
-        products = JSON.parse(data);
-    })
-    .catch((err) => {
-        console.log(err);
-    });
 
-productService.getCategories()
-    .then((data) => {
-        categories = JSON.parse(data);
-    })
-    .catch((err) => {
-        console.log(err);
-    });
 
-productService.getCategories()
-    .then((data) => {
-        categories = JSON.parse(data);
-    })
-    .catch((err) => {
-        console.log(err);
-    });
-
-const app = express();
-
-app.use(express.static(__dirname + '/views'));
-app.set('views', __dirname + '/public');
-app.set('view engine', 'html');
-app.use(bodyParser.urlencoded({ extended: true }));
-
-cloudinary.config({
-    cloud_name: "dmjwltztq",
-    api_key: "144454221373936",
-    api_secret: "QHQSIBLvzVpk-tbsOa9wQ7tpywc",
-    secure: true
+//addproduct storage
+const storage = multer.diskStorage({
+    destination: "./public/products/uploaded",
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + path.extname(file.originalname));
+      }
 });
 
-const upload = multer();
+const upload = multer({storage: storage});
 
-app.get('/', function (req, res) {
-    res.render('index.html');
+onHttpStart = () => {
+    console.log('Express http server listening on port ' + HTTP_PORT);
+}
+//use
+app.use(express.static('public'));
+app.use(bodyParser.urlencoded({extended:true}));
+
+
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname + "/views/index.html"));
 });
 
-app.get('/products', function (req, res) {
-    let publishedProducts = products.filter(ele => {
-        return ele.published;
-    })
-    res.status(200).send(publishedProducts);
+//otherwise /index would return an error
+app.get('/index', (req, res) => {
+    res.sendFile(path.join(__dirname + "/views/index.html"));
+});
+//about
+app.get('/addProduct', (req, res) => {
+    res.sendFile(path.join(__dirname + "/views/addProduct.html"));
 });
 
-app.get('/product/:id', function (req, res) {
-    let idProduct = products.find(ele => ele.id === parseInt(req.params.id))
-    res.status(200).send(idProduct);
-});
+//products
 
-app.get('/demos', function (req, res) {
-    if (req.query.category) {
-        const filterProducts = products.filter(eachProduct => eachProduct.category === parseInt(req.query.category));
-        res.status(200).json(filterProducts);
+
+
+
+app.get("/products", (req, res) => {
+    if (req.query.postDate) {
+        productservice.getProductByMinDate(req.query.postDate).then((data) => {
+            res.json({data});
+        }).catch((err) => {
+            res.json({message: err});
+        })
     }
-    else if (req.query.minDate) {
-        const filterProducts = products.filter(eachProduct => {
-            var d1 = new Date(eachProduct.date);
-            var d2 = new Date(req.query.minDate);
-            if (d1 >= d2) return true
-            else return false
-        });
-        res.status(200).json(filterProducts);
+    else if (req.query.category) {
+        productservice.getProductByCategory(req.query.category).then((data) => {
+            res.json({data});
+        }).catch((err) => {
+            res.json({message: err});
+        })
     }
-    else
-        res.status(200).json(products);
-});
-
-app.get('/categories', function (req, res) {
-    res.status(200).json(categories);
-});
-
-app.get('/products/add', function (req, res) {
-    res.sendFile('addProduct.html', { root: __dirname + '/views' });
-});
-
-app.post('/products/add', upload.single('featureImage'), function (req, res) {
-    let streamUpload = (req) => {
-        return new Promise((resolve, reject) => {
-            let stream = cloudinary.uploader.upload_stream(
-                (error, result) => {
-                    if (result) {
-                        resolve(result);
-                    } else {
-                        reject(error);
-                    }
-                }
-            );
-
-            streamifier.createReadStream(req.file.buffer).pipe(stream);
-        });
-    };
-
-    async function upload(req) {
-        let result = await streamUpload(req);
-        return result;
+    else if (req.query.id) {
+        productservice.getProductById(req.query.id).then((data) => {
+            res.json({data});
+        }).catch((err) => {
+            res.json({message: err});
+        })
     }
-
-    upload(req).then((uploaded) => {
-        req.body.featureImage = uploaded.url;
-        // TODO: Process the req.body and add it as a new Product Demo before redirecting to /demos
-        let product = {
-            id: products.length + 1,
-            ...req.body,
-            postDate: new Date,
-            featureImage: uploaded.url,
-            published: req.body.published === 'on' ? true : false,
-        }
-        products.push(product);
-
-        res.redirect('/demos');
-    });
-
-})
-
-app.get('*', function (req, res) {
-    res.status(404).send("Page Not Found");
+    else {
+        productservice.getAllProducts().then((data) => {
+        res.json({data});
+    }).catch((err) => {
+        res.json({message: err});
+    })
+    
+    }
+});
+   
+app.get('/products/add',(req,res) => {
+    res.sendFile(path.join(__dirname + "/views/addProduct.html"));
 });
 
-productService.initialize()
-    .then(() => {
-        app.listen(process.env.PORT || 8080, function () {
-            console.log("Express http server listening on 8080");
-        });
+app.post('/products/add', (req,res) => {
+    productservice.addProduct(req.body).then(() => {
+        res.redirect("/products");
     })
-    .catch(err => {
-        console.log(err);
+});
+
+
+
+app.get('/product/:value', (req,res) => {
+    productservice.getProductById(req.params.value).then((data) => {
+        res.json({data});
+    }).catch((err) => {
+        res.json({message: err});
     })
+});
+//demos
+app.get("/demos", (req, res) => {
+    productservice.getPublishedProducts().then((data) => {
+        res.json({data});
+    }).catch((err) => {
+        res.json({message: err});
+    })
+});
+
+
+
+app.get("/categories", (req, res) => {
+    productservice.getCategories().then((data) => {
+        res.json({data});
+    }).catch((err) => {
+        res.json({message: err});
+    })
+});
+//update
+app.get('/products/add',(req,res) => {
+    res.sendFile(path.join(__dirname + "/views/addProduct.html"));
+});
+
+app.post('/products/add', (req,res) => {
+    productservice.addProduct(req.body).then(() => {
+        res.redirect("/products");
+    })
+});
+
+app.use((req, res) => {
+    res.status(404).end('404 PAGE NOT FOUND');
+});
+
+productservice.initialize().then(() => {
+    app.listen(HTTP_PORT, onHttpStart());
+}).catch (() => {
+    console.log('promises unfulfilled');
+});

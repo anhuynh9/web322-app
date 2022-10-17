@@ -2,70 +2,100 @@ const file = require('fs');     //to use file system module
 var products = [];
 var categories = [];
 
-module.exports.initialize = function () {
-    var promise = new Promise((resolve, reject) => {
-
-        try {
-
-            fs.readFile('./data/products.json', 'utf-8', (err, data) => {
-                if (err) throw err;
+exports.initialize = () => {
+    return new Promise ((resolve, reject) => {
+        file.readFile('./data/products.json', (err,data) => {
+            if (err) {
+                reject ('unable to read file');
+            }
+            else {
                 products = JSON.parse(data);
-            })
+            }
+        });
 
-            fs.readFile('./data/categories.json', 'utf-8', (err, data) => {
-                if (err) throw err;
+        file.readFile('./data/categories.json', (err,data)=> {
+            if (err) {
+                reject ('unable to read file');
+            }
+            else {
                 categories = JSON.parse(data);
-            })
-
-        } catch (error) {
-            console.log(error);
-            reject("Initialization Failed");
-        }
-        resolve("Initialization Success");
-    })
-
-    return promise;
-};
-
-module.exports.getAllProducts = function () {
-
-    var promise = new Promise((resolve, reject) => {
-
-        if (products.length === 0) {
-            var err = "no data.";
-            reject({ message: err });
-        }
-
-        resolve(products);
-    })
-    return promise;
-};
-
-module.exports.getPublishedProducts = function () {
-    let publishedProducts;
-    var promise = new Promise((resolve, reject) => {
-        publishedProducts = products.filter(ele => {
-            return ele.published;
+            }
         })
+        resolve();
+    })
+};
 
-        if (publishedProducts.length === 0) {
-            var err = "no data.";
-            reject({ message: err });
+exports.getAllProducts = () => {
+    return new Promise ((resolve,reject) => {
+        if (products.length == 0) {
+            reject('no results returned');
         }
+        else {
+            resolve(products);
+        }
+    })
+};
 
+exports.getPublishedProducts = () => {
+    return new Promise ((resolve, reject) => {
+        var publishedProducts = products.filter(product => product.published == true);
+        if (publishedProducts.length == 0) {
+            reject('no results returned');
+        }
         resolve(publishedProducts);
     })
-    return promise;
 };
 
-module.exports.getCategories = function () {
-    var promise = new Promise((resolve, reject) => {
-        if (categories.length === 0) {
-            var err = "no data.";
-            reject({ message: err });
+exports.getCategories = () => {
+    return new Promise((resolve,reject) => {
+        if (categories.length == 0) {
+            reject ('no results returned');
         }
-
-        resolve(categories);
+        else {
+            resolve (categories);
+        }
     })
-    return promise;
+};
+
+exports.addProduct = (productData) => {
+    productData.published==undefined ? productData.ipublished = false : productData.published = true;
+    productData.employeeNum = employees.length + 1;
+    products.push(productData);
+
+    return new Promise((resolve,reject) => {
+        if (products.length == 0) {
+            reject ('no results');
+        }
+        else {
+            resolve(products);
+        }
+    })
+};
+exports.getProductByMinDate = (postDate) => {
+    return new Promise((resolve,reject) => {
+        var prod_postDate = products.filter(product => product.postDate == postDate);
+        if (prod_postDate .length == 0) {
+            reject('No results returned');
+        }
+        resolve(prod_postDate );
+    })
+};
+exports.getProductByCategory = (categories) => {
+    return new Promise ((resolve,reject) => {
+        var prod_categories = products.filter(product=> product.categories == categories);        
+        if (prod_categories.length == 0) {
+            reject ('No results returned');
+        }
+        resolve(prod_categories);
+    })
+};
+
+exports.getProductById = (id) => {
+    return new Promise ((resolve,reject) => {
+        var prod_id = products.filter(product=> product.id == id);        
+        if (prod_id .length == 0) {
+            reject ('No results returned');
+        }
+        resolve(prod_id );
+    })
 };
