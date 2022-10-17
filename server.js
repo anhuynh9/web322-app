@@ -1,9 +1,9 @@
 /*********************************************************************************
-* WEB322 – Assignment 02
+* WEB322 – Assignment 03
 * I declare that this assignment is my own work in accordance with Seneca Academic Policy. No part
 * of this assignment has been copied manually or electronically from any other source
 * (including 3rd party web sites) or distributed to other students. *
-* Name: An Truong Huynh Student ID: 123194219 Date: October 1 2022 *
+* Name: An Truong Huynh Student ID: 123194219 Date: October 16 2022 *
 * Online (Cyclic) Link: https://spring-green-coral-ring.cyclic.app/ *
 * ********************************************************************************/
 
@@ -15,7 +15,7 @@ const multer = require('multer');
 const cloudinary = require('cloudinary').v2
 const fs = require('fs');
 const bodyParser = require('body-parser');
-var productservice = require(__dirname + "/product-service.js");
+const productservice = require(__dirname + "/product-service.js");
 
 
 
