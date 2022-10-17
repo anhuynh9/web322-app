@@ -4,7 +4,7 @@
 * of this assignment has been copied manually or electronically from any other source
 * (including 3rd party web sites) or distributed to other students. *
 * Name: An Truong Huynh Student ID: 123194219 Date: October 16 2022 *
-* Online (Cyclic) Link: https://spring-green-coral-ring.cyclic.app/ *
+* Online (Cyclic) Link: https://busy-red-wetsuit.cyclic.app/ *
 * ********************************************************************************/
 
 var HTTP_PORT = process.env.PORT || 8080;
