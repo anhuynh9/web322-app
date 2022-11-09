@@ -19,31 +19,61 @@ const streamifier = require("streamifier");
 const { get } = require("http");
 const upload = multer();
 const productservice = require(__dirname + "/product-service.js");
+const exphbs = require('express-handlebars');
 
 
 
+app.engine('.hbs', exphbs({ 
+    extname: ".hbs", 
+    defaultLayout: "main",
+    helpers: {
+        navLink: function(url, options){
+            return '<li' + 
+                ((url == app.locals.activeRoute) ? ' class="active" ' : '') + '><a href="' + url + '">' + options.fn(this) + '</a></li>'; },
+        equal: function (lvalue, rvalue, options) {
+            if (arguments.length < 3)
+                throw new Error("Handlebars Helper equal needs 2 parameters");
+            if (lvalue != rvalue) {
+                return options.inverse(this);
+            } else {
+                return options.fn(this);
+            }
+        }           
+    } 
+}));
 
-
+app.set('view engine', '.hbs');
 onHttpStart = () => {
     console.log('Express http server listening on port ' + HTTP_PORT);
 }
 //use
 app.use(express.static('public'));
 app.use(bodyParser.urlencoded({extended:true}));
-
+cloudinary.config({
+    cloud_name: 'dmjwltztq',
+  api_key: '144454221373936',
+  api_secret: 'QHQSIBLvzVpk-tbsOa9wQ7tpywc',
+  secure: true
+  });
+app.use(function(req,res,next){
+    let route = req.path.substring(1);
+app.locals.activeRoute = "/" + (isNaN(route.split('/')[1]) ?route.replace(/\/(?!.*)/, "") :route.replace(/\/(.*)/, ""));
+app.locals.viewingCategory = req.query.category;
+next();
+});
 
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname + "/views/index.html"));
+    res.render(path.join(__dirname + "/views/home.hbs"));
 });
 
-//otherwise /index would return an error
-app.get('/index', (req, res) => {
-    res.sendFile(path.join(__dirname + "/views/index.html"));
+//otherwise /home would return an error
+app.get('/home', (req, res) => {
+    res.render(path.join(__dirname + "/views/home.hbs"));
 });
 //about
 app.get('/addProduct', (req, res) => {
-    res.sendFile(path.join(__dirname + "/views/addProduct.html"));
+    res.render(path.join(__dirname + "/views/addProduct.hbs"));
 });
 
 //add image cloudinary code
@@ -87,23 +117,23 @@ app.post("/products/add", upload.single("featureImage"), function (req, res) {
 app.get("/demos", (req, res) => {
     if (req.query.minDate) {
         productservice.getProductByMinDate(req.query.minDate).then((data) => {
-            res.json({data});
+            res.render("demos", {demos: data});
         }).catch((err) => {
-            res.json({message: err});
+            res.render("demos", {message: "no results"});
         })
     }
     else if (req.query.category) {
         productservice.getProductByCategory(req.query.category).then((data) => {
-            res.json({data});
+            res.render("demos", {demos: data});
         }).catch((err) => {
-            res.json({message: err});
+            res.render("demos", {message: "no results"});
         })
     }
     else {
         productservice.getAllProducts().then((data) => {
-        res.json({data});
+        res.render("demos", {demos: data});
     }).catch((err) => {
-        res.json({message: err});
+        res.render("demos", {message: "no results"});
     })
     
     }
@@ -121,11 +151,53 @@ app.get('/product/:value', (req,res) => {
 
 app.get("/categories", (req, res) => {
     productservice.getCategories().then((data) => {
-        res.json({data});
+        res.render("categories", {categories: data});
     }).catch((err) => {
-        res.json({message: err});
+        res.render("categories", {message: "no results"});
+
     })
 });
+app.get('/products/:id', async (req, res) => {
+
+    let data = {};
+  
+    try {
+  
+      let products = [];
+  
+      if (req.query.category) {
+        products = await productService.getPublishedproductsByCategory(req.query.category);
+      }
+  
+      else {
+        products = await productService.getPublishedproducts();
+      }
+  
+      products.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
+      data.products = products;
+  
+    } catch (err) {
+      data.message = "no results";
+    }
+  
+    try {
+      data.post = await productService.getPostById(req.params.id);
+    } catch (err) {
+      data.message = "no results";
+    }
+  
+    try {
+  
+      let categories = await productService.getCategories();
+  
+      data.categories = categories;
+    } catch (err) {
+      data.categoriesMessage = "no results"
+    }
+  
+  
+    res.render("product", { data: data })
+  });
 
 app.use((req, res) => {
     res.status(404).end('404 PAGE NOT FOUND');
