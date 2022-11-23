@@ -16,8 +16,42 @@ const exphbs = require("express-handlebars");
 const path = require("path");
 const stripJs = require('strip-js');
 const app = express();
-const HTTP_PORT = process.env.PORT || 8082;
+const HTTP_PORT = process.env.PORT || 8080;
 
+
+
+
+app.engine('.hbs', exphbs.engine({
+  extname: '.hbs',
+  helpers: {
+    navLink: function (url, options) {
+      return '<li' +
+        ((url == app.locals.activeRoute) ? ' class="active" ' : '') +
+        '><a href="' + url + '">' + options.fn(this) + '</a></li>';
+    },
+    equal: function (lvalue, rvalue, options) {
+      if (arguments.length < 3)
+        throw new Error("Handlebars Helper equal needs 2 parameters");
+      if (lvalue != rvalue) {
+        return options.inverse(this);
+      } else {
+        return options.fn(this);
+      }
+    },
+    safeHTML: function (context) {
+      return stripjs(context);
+    },
+    formatDate: function(dateObj){
+      let year = dateObj.getFullYear();
+      let month = (dateObj.getMonth() + 1).toString();
+      let day = dateObj.getDate().toString();
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2,'0')}`;
+    }
+  }
+}));
+
+app.set('view engine', '.hbs');
+app.use(express.urlencoded({extended:true}));
 cloudinary.config({
   cloud_name: 'dmjwltztq',
 api_key: '144454221373936',
@@ -27,32 +61,6 @@ secure: true
 
 
 const upload = multer();
-
-app.engine(".hbs", exphbs.engine({
-    extname: ".hbs",
-    helpers: {
-        navLink: function(url, options){
-            return '<li' + 
-                ((url == app.locals.activeRoute) ? ' class="active" ' : '') + 
-                '><a href="' + url + '">' + options.fn(this) + '</a></li>';
-        },
-        equal: function (lvalue, rvalue, options) {
-            if (arguments.length < 3)
-                throw new Error("Handlebars Helper equal needs 2 parameters");
-            if (lvalue != rvalue) {
-                return options.inverse(this);
-            } else {
-                return options.fn(this);
-            }
-        },
-        safeHTML: function(context){
-            return stripJs(context);
-        }
-    }
-}));
-
-app.set('view engine', '.hbs');
-
 app.use(express.static('public'));
 
 app.use(function(req,res,next){
@@ -62,196 +70,266 @@ app.use(function(req,res,next){
     next();
 });
 
-// app.get('/', (req, res) => {
-//     res.redirect("/product");
-// });
 
-app.get('/', (req, res) => {
-    res.render("home");
+
+app.get("/", (req, res) => {
+  res.redirect("/blog");
 });
 
-app.get('/product', async (req, res) => {
+// Route to About page
+app.get("/about", (req, res) => {
+  res.render('about');
+});
 
-    // Declare an object to store properties for the view
-    let viewData = {};
+// Route to blog page (filter posts by published) 
+app.get("/blog", async (req, res) => {
+  // Declare an object to store properties for the view
+  let viewData = {};
 
-    try{
+  // if there's a "category" query, filter the returned posts by category
+  if (req.query.category) {
+    // Obtain the published "posts" by category
+    console.log("Querying by category");
+    data.getPublishedPostsByCategory(Number(req.query.category)).then((data) => {
+      data.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
+      viewData.posts = data;
+      viewData.post = data[0];
+    }).then(() => {
+      data.getCategories().then((data) => {
+        viewData.categories = data;
+        res.render("blog", { data: viewData });
+      }).catch((err) => {
+        console.log("err");
+        viewData.categoriesMessage = "no results";
+      });
+    }).catch((err) => {
+      viewData.message = "no results";
+    });
+  } else {
+    // Obtain the published "posts"
+    data.getPublishedPosts().then((data) => {
+      data.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
+      viewData.posts = data;
+      viewData.post = data[0];
+    }).then(() => {
+      data.getCategories().then((data) => {
+        viewData.categories = data;
+        res.render("blog", { data: viewData });
+      }).catch((err) => {
+        viewData.categoriesMessage = "no results";
+      });
+    }).catch((err) => {
+      viewData.message = "no results";
+    });
+  }
+});
 
-        // declare empty array to hold "product" objects
-        let demos = [];
-
-        // if there's a "category" query, filter the returned demos by category
-        if(req.query.category){
-            // Obtain the published "demos" by category
-            demos = await productData.getPublishedProductsByCategory(req.query.category);
-        }else{
-            // Obtain the published "demos"
-            demos = await productData.getPublishedProducts();
+// Route to employee data
+app.get("/posts", (req, res) => {
+  if (req.query.hasOwnProperty('category')) {
+    data.getPostsByCategory(Number(req.query.category)).then((data) => {
+      if (data.length > 0) {
+        res.render('posts', { posts: data });
+      } else {
+        res.render("posts", { message: "no results" });
+      }
+    }).catch((err) => {
+      console.log("Error retrieving posts: " + err);
+      res.render("posts", { message: "no results" });
+    });
+  } else if (req.query.hasOwnProperty('minDate')) {
+    data.getPostsByMinDate(req.query.minDate).then((data) => {
+      if (data.length > 0) {
+        res.render('posts', { posts: data });
+      } else {
+        res.render("posts", { message: "no results" });
+      }
+    }).catch((err) => {
+      console.log("Error retrieving posts: " + err);
+      res.render("posts", { message: "no results" });
+    });
+  } else {
+    data.getAllPosts()
+      .then((data) => {
+        if (data.length > 0) {
+          res.render('posts', { posts: data });
+        } else {
+          res.render("posts", { message: "no results" });
         }
-
-        // sort the published demos by postDate
-        demos.sort((a,b) => new Date(b.postDate) - new Date(a.postDate));
-
-        // get the latest product from the front of the list (element 0)
-        let product = demos[0]; 
-
-        // store the "demos" and "product" data in the viewData object (to be passed to the view)
-        viewData.demos = demos;
-        viewData.product = product;
-
-    }catch(err){
-        viewData.message = "no results";
-    }
-
-    try{
-        // Obtain the full list of "categories"
-        let categories = await productData.getCategories();
-
-        // store the "categories" data in the viewData object (to be passed to the view)
-        viewData.categories = categories;
-    }catch(err){
-        viewData.categoriesMessage = "no results"
-    }
-
-    // render the "product" view with all of the data (viewData)
-    res.render("product", {data: viewData})
-
+      })
+      .catch((err) => {
+        console.log("Error retrieving posts: " + err);
+        res.render("posts", { message: "no results" });
+      });
+  }
 });
 
-app.get('/demos', (req, res) => {
+// Redirects to the add post page
+app.get("/posts/add", (req, res) => {
+  data.getCategories().then((data) => {
+    res.render('addPost', {categories: data});
+  }).catch((e) => {
+    res.status(500).send("Categories could not be queried from the server");
+  });
+});
 
-    let queryPromise = null;
+// Get a post by id
+app.get("/posts/:value", (req, res) => {
+  data.getPostById(Number(req.params.value)).then((data) => {
+    res.json(data);
+  }).catch((err) => {
+    console.log("Error retrieving post: " + err);
+    res.json({ message: err });
+  });
+});
 
-    if (req.query.category) {
-        queryPromise = productData.getDemosByCategory(req.query.category);
-    } else if (req.query.minDate) {
-        queryPromise = productData.getDemosByMinDate(req.query.minDate);
-    } else {
-        queryPromise = productData.getAllDemos()
-    }
-
-    queryPromise.then(data => {
-        res.render("demos", {demos: data});
-    }).catch(err => {
-        res.render("demos", {message: "no results"});
+// Route to category data
+app.get("/categories", (req, res) => {
+  data.getCategories()
+    .then((data) => {
+      if (data.length > 0) {
+        res.render("categories", { categories: data });
+      } else {
+        res.render("categories", { message: "no results" });
+      }
     })
-
+    .catch((err) => {
+      console.log("Error retrieving categories: " + err);
+      res.render("categories", { message: "no results" });
+    });
 });
 
-app.post("/demos/add", upload.single("featureImage"), (req,res)=>{
-
-    if(req.file){
-        let streamUpload = (req) => {
-            return new Promise((resolve, reject) => {
-                let stream = cloudinary.uploader.upload_stream(
-                    (error, result) => {
-                        if (result) {
-                            resolve(result);
-                        } else {
-                            reject(error);
-                        }
-                    }
-                );
-    
-                streamifier.createReadStream(req.file.buffer).pipe(stream);
-            });
-        };
-    
-        async function upload(req) {
-            let result = await streamUpload(req);
-            console.log(result);
-            return result;
-        }
-    
-        upload(req).then((uploaded)=>{
-            processProduct(uploaded.url);
-        });
-    }else{
-        processProduct("");
-    }
-
-    function processProduct(imageUrl){
-        req.body.featureImage = imageUrl;
-
-        productData.addProduct(req.body).then(product=>{
-            res.redirect("/demos");
-        }).catch(err=>{
-            res.status(500).send(err);
-        })
-    }   
+// Add a category
+app.get("/categories/add",(req, res) => {
+  res.render('addCategory');
 });
 
-app.get('/demos/add', (req, res) => {
-    res.render("addProduct");
+app.post("/categories/add", (req,res) => {
+  console.log("******Posting******");
+  data.addCategory(JSON.parse(JSON.stringify(req.body))).then(() => {
+    res.redirect('/categories');
+  });
 });
 
+app.get("/categories/delete/:id", (req,res) => {
+  data.deleteCategoryById(Number(req.params.id)).then(() => {
+    res.redirect("/categories");
+  }).catch(() => {
+    res.status(500).send("Unable to Remove Category / Category not found");
+  });
+});
 
-app.get('/product/:id', async (req, res) => {
+app.get("/posts/delete/:id", (req,res) => {
+  data.deletePostById(Number(req.params.id)).then(() => {
+    res.redirect("/posts");
+  }).catch(() => {
+    res.status(500).send("Unable to Remove Post / Post not found");
+  })
+})
 
-    // Declare an object to store properties for the view
-    let viewData = {};
+app.get('/blog/:id', async (req, res) => {
 
-    try{
+  // Declare an object to store properties for the view
+  let viewData = {};
 
-        // declare empty array to hold "product" objects
-        let demos = [];
-
-        // if there's a "category" query, filter the returned demos by category
-        if(req.query.category){
-            // Obtain the published "demos" by category
-            demos = await productData.getPublishedProductsByCategory(req.query.category);
-        }else{
-            // Obtain the published "demos"
-            demos = await productData.getPublishedProducts();
-        }
-
-        // sort the published demos by postDate
-        demos.sort((a,b) => new Date(b.postDate) - new Date(a.postDate));
-
-        // store the "demos" and "product" data in the viewData object (to be passed to the view)
-        viewData.demos = demos;
-
-    }catch(err){
+  // if there's a "category" query, filter the returned posts by category
+  if (req.query.category) {
+    // Obtain the published "posts" by category
+    data.getPublishedPostsByCategory(req.query.category).then((data) => {
+      data.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
+      viewData.posts = data;
+    }).then(() => {
+      data.getCategories().then((data) => {
+        viewData.categories = data;
+        res.render("blog", { data: viewData });
+      }).catch((err) => {
+        viewData.categoriesMessage = "no results";
+      });
+    }).then(() => {
+      data.getPostById(Number(req.params.id)).then((data) => {
+        viewData.post = data;
+      }).catch((err) => {
         viewData.message = "no results";
-    }
-
-    try{
-        // Obtain the product by "id"
-        viewData.product = await productData.getProductById(req.params.id);
-    }catch(err){
-        viewData.message = "no results"; 
-    }
-
-    try{
-        // Obtain the full list of "categories"
-        let categories = await productData.getCategories();
-
-        // store the "categories" data in the viewData object (to be passed to the view)
-        viewData.categories = categories;
-    }catch(err){
-        viewData.categoriesMessage = "no results"
-    }
-
-    // render the "product" view with all of the data (viewData)
-    res.render("product", {data: viewData})
-});
-
-app.get('/categories', (req, res) => {
-    productData.getCategories().then((data => {
-        res.render("categories", {categories: data});
-    })).catch(err => {
-        res.render("categories", {message: "no results"});
+      });
+    }).catch((err) => {
+      viewData.message = "no results";
     });
+  } else {
+    // Obtain the published "posts"
+    data.getPublishedPosts().then((data) => {
+      data.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
+      viewData.posts = data;
+    }).then(() => {
+      data.getCategories().then((data) => {
+        viewData.categories = data;
+        res.render("blog", { data: viewData });
+      }).catch((err) => {
+        viewData.categoriesMessage = "no results";
+      });
+    }).then(() => {
+      data.getPostById(Number(req.params.id)).then((data) => {
+        viewData.post = data;
+      }).catch((err) => {
+        viewData.message = "no results";
+      });
+    }).catch((err) => {
+      viewData.message = "no results";
+    });
+  }
 });
 
+// Adds posts and uploads files 
+app.post("/posts/add", upload.single("featureImage"), (req, res) => {
+  if (req.file) {
+    let streamUpload = (req) => {
+      return new Promise((resolve, reject) => {
+        let stream = cloudinary.uploader.upload_stream(
+          (result, error) => { // Swapped error and result
+            if (result) {
+              resolve(result);
+            } else {
+              reject(error);
+            }
+          }
+        );
+
+        streamifier.createReadStream(req.file.buffer).pipe(stream);
+      });
+    };
+  
+    async function upload(req) {
+      let result = await streamUpload(req);//.catch((err) => {
+      // console.log("Error: " + err);
+      // });
+      console.log(result);
+      return result;
+    }
+
+    upload(req).then((uploaded) => {
+      processPost(uploaded.url)
+    });
+  } else {
+    processPost("");
+  }
+ 
+  function processPost(imageUrl) {
+    req.body.featureImage = imageUrl;
+    data.addPost(JSON.parse(JSON.stringify(req.body))).then(() => {
+      res.redirect("/posts");
+    }).catch((e) => {
+      res.status(500).send(e);
+    });
+  }
+});
+
+// Catch all other requests
 app.use((req, res) => {
-    res.status(404).render("404");
+  res.status(404).send("Page Not Found");
 })
 
-productData.initialize().then(() => {
-    app.listen(HTTP_PORT, () => {
-        console.log('server listening on: ' + HTTP_PORT);
-    });
+data.initialize().then(() => {
+  app.listen(HTTP_PORT);
+  console.log("Express http server listening on " + HTTP_PORT);
 }).catch((err) => {
-    console.log(err);
-})
+  console.log("Error starting server: " + err + " aborting startup");
+});
