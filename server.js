@@ -7,16 +7,16 @@
 * Online (Cyclic) Link: https://busy-red-wetsuit.cyclic.app *
 * ********************************************************************************/
 
-const express = require('express');
-const productData = require("./product-service");
-const multer = require("multer");
-const cloudinary = require('cloudinary').v2;
-const streamifier = require('streamifier');
-const exphbs = require("express-handlebars");
-const path = require("path");
-const stripJs = require('strip-js');
-const app = express();
 const HTTP_PORT = process.env.PORT || 8080;
+const express = require('express');
+const app = express();
+const path = require('path');
+const data = require(path.join(__dirname, 'product-service.js'));
+const multer = require("multer");
+const cloudinary = require("cloudinary");
+const streamifier = require("streamifier");
+const exphbs = require('express-handlebars');
+const stripjs = require('strip-js');
 
 
 
