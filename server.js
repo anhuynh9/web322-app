@@ -11,47 +11,18 @@ const HTTP_PORT = process.env.PORT || 8080;
 const express = require('express');
 const app = express();
 const path = require('path');
-const data = require(path.join(__dirname, 'product-service.js'));
+const productData = require(path.join(__dirname, 'product-service.js'));
+const authData = require("./auth-service.js");
 const multer = require("multer");
-const cloudinary = require("cloudinary");
+const cloudinary = require("cloudinary").v2;
 const streamifier = require("streamifier");
 const exphbs = require('express-handlebars');
 const stripjs = require('strip-js');
+const clientSessions = require("client-sessions");
 
 
 
 
-app.engine('.hbs', exphbs.engine({
-  extname: '.hbs',
-  helpers: {
-    navLink: function (url, options) {
-      return '<li' +
-        ((url == app.locals.activeRoute) ? ' class="active" ' : '') +
-        '><a href="' + url + '">' + options.fn(this) + '</a></li>';
-    },
-    equal: function (lvalue, rvalue, options) {
-      if (arguments.length < 3)
-        throw new Error("Handlebars Helper equal needs 2 parameters");
-      if (lvalue != rvalue) {
-        return options.inverse(this);
-      } else {
-        return options.fn(this);
-      }
-    },
-    safeHTML: function (context) {
-      return stripjs(context);
-    },
-    formatDate: function(dateObj){
-      let year = dateObj.getFullYear();
-      let month = (dateObj.getMonth() + 1).toString();
-      let day = dateObj.getDate().toString();
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2,'0')}`;
-    }
-  }
-}));
-
-app.set('view engine', '.hbs');
-app.use(express.urlencoded({extended:true}));
 cloudinary.config({
   cloud_name: 'dmjwltztq',
 api_key: '144454221373936',
@@ -60,276 +31,379 @@ secure: true
 });
 
 
-const upload = multer();
-app.use(express.static('public'));
 
-app.use(function(req,res,next){
-    let route = req.path.substring(1);
-    app.locals.activeRoute = (route == "/") ? "/" : "/" + route.replace(/\/(.*)/, "");
-    app.locals.viewingCategory = req.query.category;
-    next();
+app.use(
+  clientSessions({
+    cookieName: "session",
+    secret: "web322_Assignemnt06",
+    duration: 2 * 60 * 1000,
+    activeDuration: 1000 * 60,
+  })
+);
+
+app.use((req, res, next) => {
+  res.locals.session = req.session;
+  next();
 });
 
+function ensureLogin(req, res, next) {
+  if (!req.session.user) {
+      res.redirect("/login");
+  } else {
+      next();
+  }
+}
+const upload = multer();
+
+app.engine('.hbs', exphbs.engine({
+  extname: '.hbs',
+  defaultLayout: "main",
+  helpers: {
+      navLink: function (url, options) {
+          return '<li' +
+              ((url == app.locals.activeRoute) ? ' class="active" ' : '') +
+              '><a href="' + url + '">' + options.fn(this) + '</a></li>';
+      },
+      equal: function (lvalue, rvalue, options) {
+          if (arguments.length < 3)
+              throw new Error("Handlebars Helper equal needs 2 parameters");
+          if (lvalue != rvalue) {
+              return options.inverse(this);
+          } else {
+              return options.fn(this);
+          }
+      }
+  }
+}));
+
+app.set("view engine", ".hbs");
+app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
+
+
+
+app.use(function (req, res, next) {
+  let route = req.path.substring(1);
+  app.locals.activeRoute =
+    "/" +
+    (isNaN(route.split("/")[1])
+      ? route.replace(/\/(?!.*)/, "")
+      : route.replace(/\/(.*)/, ""));
+  app.locals.viewingCategory = req.query.category;
+  next();
+});
 
 
 app.get("/", (req, res) => {
-  res.redirect("/blog");
+  res.redirect("/product");
 });
 
-// Route to About page
-app.get("/about", (req, res) => {
-  res.render('about');
+
+
+app.get("/home", (req, res) => {
+  res.render("home");
 });
 
-// Route to blog page (filter posts by published) 
-app.get("/blog", async (req, res) => {
-  // Declare an object to store properties for the view
-  let viewData = {};
+app.get("/product", async (req, res) => {
+ let viewData = {};
 
-  // if there's a "category" query, filter the returned posts by category
+  try {
+   let products = [];
+
+   if (req.query.category) {
+      products = await productData.getPublishedProductsByCategory(
+        req.query.category
+      );
+    } else {
+      products = await productData.getPublishedProducts();
+    }
+
+    products.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
+
+    let product = products[0];
+
+    viewData.products = products;
+    viewData.product = product;
+  } catch (err) {
+    viewData.message = "no results";
+  }
+
+  try {
+    let categories = await productData.getCategories();
+
+    viewData.categories = categories;
+  } catch (err) {
+    viewData.categoriesMessage = "no results";
+  }
+
+  res.render("product", { data: viewData });
+});
+
+//get demos - add ensureLogin
+app.get("/demos", ensureLogin, (req, res) => {
   if (req.query.category) {
-    // Obtain the published "posts" by category
-    console.log("Querying by category");
-    data.getPublishedPostsByCategory(Number(req.query.category)).then((data) => {
-      data.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
-      viewData.posts = data;
-      viewData.post = data[0];
-    }).then(() => {
-      data.getCategories().then((data) => {
-        viewData.categories = data;
-        res.render("blog", { data: viewData });
-      }).catch((err) => {
-        console.log("err");
-        viewData.categoriesMessage = "no results";
-      });
-    }).catch((err) => {
-      viewData.message = "no results";
-    });
-  } else {
-    // Obtain the published "posts"
-    data.getPublishedPosts().then((data) => {
-      data.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
-      viewData.posts = data;
-      viewData.post = data[0];
-    }).then(() => {
-      data.getCategories().then((data) => {
-        viewData.categories = data;
-        res.render("blog", { data: viewData });
-      }).catch((err) => {
-        viewData.categoriesMessage = "no results";
-      });
-    }).catch((err) => {
-      viewData.message = "no results";
-    });
-  }
-});
-
-// Route to employee data
-app.get("/posts", (req, res) => {
-  if (req.query.hasOwnProperty('category')) {
-    data.getPostsByCategory(Number(req.query.category)).then((data) => {
-      if (data.length > 0) {
-        res.render('posts', { posts: data });
-      } else {
-        res.render("posts", { message: "no results" });
-      }
-    }).catch((err) => {
-      console.log("Error retrieving posts: " + err);
-      res.render("posts", { message: "no results" });
-    });
-  } else if (req.query.hasOwnProperty('minDate')) {
-    data.getPostsByMinDate(req.query.minDate).then((data) => {
-      if (data.length > 0) {
-        res.render('posts', { posts: data });
-      } else {
-        res.render("posts", { message: "no results" });
-      }
-    }).catch((err) => {
-      console.log("Error retrieving posts: " + err);
-      res.render("posts", { message: "no results" });
-    });
-  } else {
-    data.getAllPosts()
+    productData
+      .getPublishedProductsByCategory(req.query.category)
       .then((data) => {
-        if (data.length > 0) {
-          res.render('posts', { posts: data });
-        } else {
-          res.render("posts", { message: "no results" });
+        if (data.length == 0) {
+          res.render("demos", { message: "no results" });
+          return;
         }
+        res.render("demos", { products: data });
       })
-      .catch((err) => {
-        console.log("Error retrieving posts: " + err);
-        res.render("posts", { message: "no results" });
+      .catch(() => {
+        res.render("demos", { message: "no results" });
       });
+  } else if (req.query.minDate) {
+    productData
+      .getProductByMinDate(req.query.minDate)
+      .then((data) => {
+        if (data.length == 0) {
+          res.render("demos", { message: "no results" });
+          return;
+        }
+        res.render("demos", { products: data });
+      })
+      .catch(() => {
+        res.render("demos", { message: "no results" });
+      });
+  } else {
+    productData
+      .getAllProducts()
+      .then((data) => {
+        if (data.length == 0) {
+          res.render("demos", { message: "no results" });
+          return;
+        }
+        console.log("this is demnos rendering");
+        res.render("demos", { products: data });
+      })
+      .catch(() => res.render("demos", { message: "no results" }));
   }
 });
 
-// Redirects to the add post page
-app.get("/posts/add", (req, res) => {
-  data.getCategories().then((data) => {
-    res.render('addPost', {categories: data});
-  }).catch((e) => {
-    res.status(500).send("Categories could not be queried from the server");
-  });
-});
 
-// Get a post by id
-app.get("/posts/:value", (req, res) => {
-  data.getPostById(Number(req.params.value)).then((data) => {
-    res.json(data);
-  }).catch((err) => {
-    console.log("Error retrieving post: " + err);
-    res.json({ message: err });
-  });
-});
-
-// Route to category data
-app.get("/categories", (req, res) => {
-  data.getCategories()
-    .then((data) => {
-      if (data.length > 0) {
-        res.render("categories", { categories: data });
-      } else {
-        res.render("categories", { message: "no results" });
-      }
+app.get("/demos/delete/:id", ensureLogin, (req, res) => {
+  productData
+    .deleteProductById(req.params.id)
+    .then(() => {
+      res.redirect("/demos");
     })
     .catch((err) => {
-      console.log("Error retrieving categories: " + err);
+      res.status(500).send("Unable to Remove Post / Post Not Found");
+    });
+});
+
+app.get("/demos/:id", ensureLogin, (req, res) => {
+  productData
+    .getProductById(req.params.id)
+    .then((data) => {
+      res.json(data);
+    })
+    .catch((err) => {
+      res.json({ message: err });
+    });
+});
+
+
+app.get("/categories", ensureLogin, (req, res) => {
+  productData
+    .getCategories()
+    .then((data) => {
+      res.render("categories", { categories: data });
+    })
+    .catch((err) => {
       res.render("categories", { message: "no results" });
     });
 });
 
-// Add a category
-app.get("/categories/add",(req, res) => {
-  res.render('addCategory');
+app.get("/categories/add", ensureLogin, (req, res) => {
+  res.render("addCategory");
 });
 
-app.post("/categories/add", (req,res) => {
-  console.log("******Posting******");
-  data.addCategory(JSON.parse(JSON.stringify(req.body))).then(() => {
-    res.redirect('/categories');
-  });
+app.post("/categories/add", ensureLogin, (req, res) => {
+  productData
+    .addCategory(req.body)
+    .then((category) => {
+      res.redirect("/categories");
+    })
+    .catch((err) => {
+      res.status(500).send(err.message);
+    });
 });
 
-app.get("/categories/delete/:id", (req,res) => {
-  data.deleteCategoryById(Number(req.params.id)).then(() => {
-    res.redirect("/categories");
-  }).catch(() => {
-    res.status(500).send("Unable to Remove Category / Category not found");
-  });
+app.get("/categories/delete/:id", ensureLogin, (req, res) => {
+  productData
+    .deleteCategoryById(req.params.id)
+    .then(() => {
+      res.redirect("/categories");
+    })
+    .catch((err) => {
+      res.status(500).send("Unable to Remove Category / Category Not Found");
+    });
 });
 
-app.get("/posts/delete/:id", (req,res) => {
-  data.deletePostById(Number(req.params.id)).then(() => {
-    res.redirect("/posts");
-  }).catch(() => {
-    res.status(500).send("Unable to Remove Post / Post not found");
+app.get("/products/add", ensureLogin, (req, res) => {
+  productData
+  .getCategories()
+  .then((data) => {
+    res.render("addProduct", { categories: data });
   })
-})
-
-app.get('/blog/:id', async (req, res) => {
-
-  // Declare an object to store properties for the view
-  let viewData = {};
-
-  // if there's a "category" query, filter the returned posts by category
-  if (req.query.category) {
-    // Obtain the published "posts" by category
-    data.getPublishedPostsByCategory(req.query.category).then((data) => {
-      data.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
-      viewData.posts = data;
-    }).then(() => {
-      data.getCategories().then((data) => {
-        viewData.categories = data;
-        res.render("blog", { data: viewData });
-      }).catch((err) => {
-        viewData.categoriesMessage = "no results";
-      });
-    }).then(() => {
-      data.getPostById(Number(req.params.id)).then((data) => {
-        viewData.post = data;
-      }).catch((err) => {
-        viewData.message = "no results";
-      });
-    }).catch((err) => {
-      viewData.message = "no results";
-    });
-  } else {
-    // Obtain the published "posts"
-    data.getPublishedPosts().then((data) => {
-      data.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
-      viewData.posts = data;
-    }).then(() => {
-      data.getCategories().then((data) => {
-        viewData.categories = data;
-        res.render("blog", { data: viewData });
-      }).catch((err) => {
-        viewData.categoriesMessage = "no results";
-      });
-    }).then(() => {
-      data.getPostById(Number(req.params.id)).then((data) => {
-        viewData.post = data;
-      }).catch((err) => {
-        viewData.message = "no results";
-      });
-    }).catch((err) => {
-      viewData.message = "no results";
-    });
-  }
+  .catch((err) => {
+    res.render("addProduct", { categories: [] });
+  });
 });
 
-// Adds posts and uploads files 
-app.post("/posts/add", upload.single("featureImage"), (req, res) => {
+app.post("/products/add", ensureLogin, upload.single("featureImage"), (req, res) => {
   if (req.file) {
     let streamUpload = (req) => {
       return new Promise((resolve, reject) => {
-        let stream = cloudinary.uploader.upload_stream(
-          (result, error) => { // Swapped error and result
-            if (result) {
-              resolve(result);
-            } else {
-              reject(error);
-            }
+        let stream = cloudinary.uploader.upload_stream((error, result) => {
+          if (result) {
+            resolve(result);
+          } else {
+            reject(error);
           }
-        );
+        });
 
         streamifier.createReadStream(req.file.buffer).pipe(stream);
       });
     };
-  
     async function upload(req) {
-      let result = await streamUpload(req);//.catch((err) => {
-      // console.log("Error: " + err);
-      // });
+      let result = await streamUpload(req);
       console.log(result);
       return result;
     }
 
     upload(req).then((uploaded) => {
-      processPost(uploaded.url)
+      processProducts(uploaded.url);
     });
   } else {
-    processPost("");
+    processProducts("");
   }
- 
-  function processPost(imageUrl) {
+
+  function processProducts(imageUrl) {
     req.body.featureImage = imageUrl;
-    data.addPost(JSON.parse(JSON.stringify(req.body))).then(() => {
-      res.redirect("/posts");
-    }).catch((e) => {
-      res.status(500).send(e);
-    });
+
+    productData
+      .addProduct(req.body)
+      .then(() => {
+        console.log("rendering products pages")
+        res.redirect("/product");
+      })
+      .catch((err) => {
+        res.status(500).send(err);
+      });
   }
 });
 
-// Catch all other requests
-app.use((req, res) => {
-  res.status(404).send("Page Not Found");
+app.get("/product/:id", ensureLogin, async (req, res) => {
+  // Declare an object to store properties for the view
+  let viewData = {};
+
+  try {
+    // declare empty array to hold "product" objects
+    let products = [];
+
+    // if there's a "category" query, filter the returned demos by category
+    if (req.query.category) {
+      // Obtain the published "demos" by category
+      products = await productData.getPublishedProductsByCategory(
+        req.query.category
+      );
+    } else {
+      // Obtain the published "demos"
+      products = await productData.getPublishedProducts();
+    }
+
+    // sort the published demos by postDate
+    products.sort((a, b) => new Date(b.postDate) - new Date(a.postDate));
+
+    // store the "demos" and "product" data in the viewData object (to be passed to the view)
+    viewData.products = products;
+  } catch (err) {
+    viewData.message = "no results";
+  }
+
+  try {
+    // Obtain the product by "id"
+    viewData.product = await productData.getProductById(req.params.id);
+  } catch (err) {
+    viewData.message = "no results";
+  }
+
+  try {
+    // Obtain the full list of "categories"
+    let categories = await productData.getCategories();
+
+    // store the "categories" data in the viewData object (to be passed to the view)
+    viewData.categories = categories;
+  } catch (err) {
+    viewData.categoriesMessage = "no results";
+  }
+
+  // render the "product" view with all of the data (viewData)
+  res.render("product", { data: viewData });
+});
+
+
+//GET/login
+app.get('/login', (req, res) => {
+	res.render('login')
 })
 
-data.initialize().then(() => {
-  app.listen(HTTP_PORT);
-  console.log("Express http server listening on " + HTTP_PORT);
-}).catch((err) => {
-  console.log("Error starting server: " + err + " aborting startup");
+//GET/register
+app.get('/register', (req, res) => {
+	res.render('register')
+})
+
+//POST/register
+app.post('/register', (req, res) => {
+	authData
+		.RegisterUser(req.body)
+		.then(() => {
+			res.render('register', { successMessage: 'User created' })
+		})
+		.catch((err) => {
+			res.render('register', { errorMessage: err, userName: req.body.userName })
+		})
+})
+//POST/login
+app.post('/login', (req, res) => {
+	req.body.userAgent = req.get('User-Agent');
+	authData
+		.checkUser(req.body)
+		.then((user) => {
+			req.session.user = {
+				userName: user.userName,// authenticated user's userName
+				email: user.email, // authenticated user's email
+				loginHistory: user.loginHistory// authenticated user's loginHistory
+			}
+		
+			res.redirect('/demos');
+		})
+		.catch((err) => {
+			res.render('login', { errorMessage: err, userName: req.body.userName })
+		})
+})
+//GET/logout
+app.get('/logout', (req, res) => {
+	req.session.reset();
+	res.redirect('/');
+})
+//GET/userHistory
+app.get('/userHistory', ensureLogin, (req, res) => {
+	res.render('userHistory')
+})
+
+app.use((req, res) => {
+  res.status(404).render("404");
+});
+
+productData.initialize().then(authData.initialize).then(function () {
+  app.listen(HTTP_PORT, function () {
+      console.log("app listening on: " + HTTP_PORT)
+  });
+}).catch(function (err) {
+  console.log("unable to start server: " + err);
 });
