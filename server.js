@@ -19,6 +19,7 @@ const streamifier = require("streamifier");
 const exphbs = require('express-handlebars');
 const stripjs = require('strip-js');
 const clientSessions = require("client-sessions");
+const stripJs = require('strip-js');
 
 
 
@@ -55,13 +56,12 @@ function ensureLogin(req, res, next) {
 }
 const upload = multer();
 
-app.engine('.hbs', exphbs.engine({
-  extname: '.hbs',
-  defaultLayout: "main",
+app.engine(".hbs", exphbs.engine({
+  extname: ".hbs",
   helpers: {
-      navLink: function (url, options) {
-          return '<li' +
-              ((url == app.locals.activeRoute) ? ' class="active" ' : '') +
+      navLink: function(url, options){
+          return '<li' + 
+              ((url == app.locals.activeRoute) ? ' class="active" ' : '') + 
               '><a href="' + url + '">' + options.fn(this) + '</a></li>';
       },
       equal: function (lvalue, rvalue, options) {
@@ -72,6 +72,15 @@ app.engine('.hbs', exphbs.engine({
           } else {
               return options.fn(this);
           }
+      },
+      safeHTML: function(context){
+          return stripJs(context);
+      },
+      formatDate: function(dateObj){
+          let year = dateObj.getFullYear();
+          let month = (dateObj.getMonth() + 1).toString();
+          let day = dateObj.getDate().toString();
+          return `${year}-${month.padStart(2, '0')}-${day.padStart(2,'0')}`;
       }
   }
 }));
