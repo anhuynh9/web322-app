@@ -113,7 +113,7 @@ app.get("/home", (req, res) => {
   res.render("home");
 });
 
-app.get("/product",ensureLogin, async (req, res) => {
+app.get("/product", async (req, res) => {
  let viewData = {};
 
   try {
