@@ -18,7 +18,7 @@ const userSchema = new Schema({
 let User;
 
 module.exports.initialize = () => new Promise((resolve, reject) => {
-	let db = mongoose.createConnection("mongodb+srv://antruonghuynh:<password>@senecaweb.roocsbq.mongodb.net/?retryWrites=true&w=majority");
+	let db = mongoose.createConnection("mongodb+srv://antruonghuynh:6Qh9kRThZtllYFkq@senecaweb.roocsbq.mongodb.net/?retryWrites=true&w=majority");
     db.on('error', (err) => {
 		reject(err);
     });
